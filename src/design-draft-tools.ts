@@ -6,7 +6,8 @@ import { basename, dirname, extname, isAbsolute, join } from 'node:path'
 import type FileSystem from '@deepseek-ai/dsh-fs'
 import type { FsObservation, FsTarget } from '@deepseek-ai/dsh-fs'
 import type SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
-import { defineTool, type JsonValue, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from './json-value.js'
 import {
   inspectGeneratedDraftStructureReport,
   inspectGeneratedDesignQualityReport,

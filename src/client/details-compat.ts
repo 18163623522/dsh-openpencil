@@ -1,27 +1,26 @@
 /** Compatibility boundary for future DSH builds that add a keyed Tool-details seam. */
 
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
-import type { DetailsToolOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 
 /**
- * Published DSH rc.2 through 0.1.0-rc.6 do not declare this slot. Keeping the
- * proposed additive contract local lets a future supporting host activate the
- * native surface without breaking current hosts. At runtime `slots.inject()`
- * waits while a slot is absent, so current releases use the plugin workbench.
+ * The proposed `tool.details.toolview` slot was declared here so a future host
+ * could activate a resident details column without breaking current ones. DSH
+ * 0.1.5 settled the question the other way: it declares `tool.call.toolview`
+ * and `tool.call.images` only, and removed `DetailsToolOwnerProps` — the type
+ * the forward-compat declaration named as the slot owner. The declaration and
+ * its registration are therefore gone.
+ *
+ * Nothing observable changes. `slots.inject()` waits while a slot is absent,
+ * so on every host that ever shipped, the registration never fired and
+ * `requestOpenPencilEditor` already fell through to the plugin's own modal.
+ * The panel component stays, driven by the page-owned host below.
  */
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface SlotMap {
-    'tool.details.toolview': {
-      kind: 'keyed'
-      scope: 'session'
-      owner: DetailsToolOwnerProps
-    }
-  }
+export interface CompatibleToolDetailsViewProps {
+  /** The tool-call block whose design this panel edits. */
+  block: ToolCallViewProps['block']
+  /** Session the block belongs to. */
+  sessionId: string
 }
-
-/** Details props without importing a symbol absent from current DSH releases. */
-export type CompatibleToolDetailsViewProps = PropsRuntime<'tool.details.toolview'>
 
 /** Call props with a possible future additive sidebar capability. */
 export type CompatibleToolCallViewProps = ToolCallViewProps & {

@@ -14,7 +14,7 @@
  * @module dsh-openpencil/design-agent-run
  */
 
-import type { JsonValue } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from './json-value.js'
 
 /** Engine selector accepted by `openpencil_pipeline_begin`. */
 export type PipelineEngine = 'script' | 'app-agent'

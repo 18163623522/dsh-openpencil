@@ -11,7 +11,8 @@
  * @module dsh-openpencil/tool
  */
 
-import { defineTool, type JsonValue, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from './json-value.js'
 import { basename } from 'node:path'
 import {
   RenderAccessController,

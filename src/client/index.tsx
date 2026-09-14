@@ -1112,11 +1112,6 @@ export function apply(ctx: ClientContext): void {
       />
     )
   }
-  const HostSyncedOpenPencilEditorPanel = (props: CompatibleToolDetailsViewProps): React.JSX.Element => {
-    const colorScheme = useSyncExternalStore(subscribeTheme, getColorScheme, getColorScheme)
-    const locale = useSyncExternalStore(subscribeLocale, getEditorLocale, getEditorLocale)
-    return <OpenPencilEditorPanel {...props} colorScheme={colorScheme} locale={locale} />
-  }
   const HostSyncedOpenPencilSelectionDock = (props: Omit<React.ComponentProps<typeof OpenPencilSelectionDock>, 'locale'>): React.JSX.Element => {
     const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
     return <OpenPencilSelectionDock {...props} locale={locale} />
@@ -1131,10 +1126,6 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
       { name: 'tool.call.toolview', key: toolName },
       HostSyncedDesignRenderView,
-    ))
-    ctx.slots.inject('tool.details.toolview', () => ctx.slots.register(
-      { name: 'tool.details.toolview', key: toolName },
-      HostSyncedOpenPencilEditorPanel,
     ))
   }
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(

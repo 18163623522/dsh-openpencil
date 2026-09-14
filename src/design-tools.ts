@@ -1,6 +1,7 @@
 /** Model-facing tools that directly drive the active OpenPencil canvas. */
 
-import { defineTool, type JsonValue, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from './json-value.js'
 import type { EditorHostController } from './editor-host.js'
 import { resolveInputFile } from './renderer.js'
 import type { OpenPencilSelectionSnapshot } from './mcp-client.js'

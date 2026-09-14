@@ -18,7 +18,8 @@ import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { basename, isAbsolute, join } from 'node:path'
 import { SessionId, type SessionStore } from '@deepseek-ai/dsh-session'
-import type { JsonValue, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import type { ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from './json-value.js'
 import { isLoopbackRemoteAddress, type EditorHostController } from './editor-host.js'
 import type { DesignNewResult } from './new-tool.js'
 import type { BegunDraft, PublishedDraft } from './design-draft-tools.js'
@@ -134,7 +135,12 @@ interface LiveTombstoneRecord {
 type LiveRecord = LiveAuthorizationRecord | LiveTombstoneRecord
 
 type StoredSession = NonNullable<ReturnType<SessionStore['get']>>
-type StoredEvent = StoredSession['events'][number]
+// DSH 0.1.5 removed `Session.events`. `snapshotEvents()` is the replacement:
+// it materialises an immutable snapshot of the log, reuses the full snapshot
+// until the next append, and keeps every previously returned snapshot stable
+// afterwards — so the incremental history index below still holds (it detects
+// growth by length and confirms continuity by tail identity).
+type StoredEvent = ReturnType<StoredSession['snapshotEvents']>[number]
 
 interface HistoricalSettlement {
   duplicate: boolean
@@ -1073,7 +1079,7 @@ export class PresentationHydrationController {
   }
 
   #historyIndex(session: StoredSession): SessionHistoryIndex {
-    const events = session.events
+    const events = session.snapshotEvents()
     let index = this.#history.get(session as object)
     if (
       index === undefined
@@ -1091,8 +1097,12 @@ export class PresentationHydrationController {
     // last hydration; replacement, truncation, or tail mutation resets safely.
     for (let eventIndex = index.indexedLength; eventIndex < events.length; eventIndex += 1) {
       const event = events[eventIndex]
+      // DSH 0.1.5 renamed this event: `tool/code-dispatch` -> `tool/ptc-dispatch`
+      // (declared by @deepseek-ai/dsh-tools into SessionEventMap). Same
+      // vocabulary — subCallId / name / arguments / content / isError — so the
+      // settlement scan below is unchanged apart from the name.
       if (
-        event?.type !== 'tool/code-dispatch'
+        event?.type !== 'tool/ptc-dispatch'
         || (
           event.data.name !== OPENPENCIL_RENDER_TOOL_NAME
           && event.data.name !== OPENPENCIL_NEW_TOOL_NAME
@@ -1117,7 +1127,7 @@ export class PresentationHydrationController {
   }
 
   #parseHistoricalEvent(event: StoredEvent): HydratableResult | undefined {
-    if (event.type !== 'tool/code-dispatch') return undefined
+    if (event.type !== 'tool/ptc-dispatch') return undefined
     const data = event.data
     if (data.isError !== false || !Array.isArray(data.content) || data.content.length !== 1) return undefined
     const block = data.content[0]
