@@ -1386,32 +1386,29 @@ test('registers canonical OpenPencil publication/render views and client-only le
   assert.equal(client.OPENPENCIL_PIPELINE_FINISH_TOOL_NAME, 'openpencil_pipeline_finish')
   assert.equal(client.OPENPENCIL_PIPELINE_INSPECT_TOOL_NAME, 'openpencil_pipeline_inspect')
   assert.equal(client.LEGACY_DESIGN_RENDER_TOOL_NAME, 'design_render')
+  // DSH 0.1.5 settled the details seat: the host declares tool.call.toolview
+  // and tool.call.images only, so the plugin no longer registers a
+  // tool.details.toolview view for each tool. The editor opens through the
+  // page-owned workbench modal instead — which is what every shipped host
+  // already did, since slots.inject() waits forever on an absent slot.
   assert.deepEqual(registrations.map(({ definition }) => definition), [
     { name: 'tool.call.toolview', key: 'openpencil_render' },
-    { name: 'tool.details.toolview', key: 'openpencil_render' },
     { name: 'tool.call.toolview', key: 'openpencil_new' },
-    { name: 'tool.details.toolview', key: 'openpencil_new' },
     { name: 'tool.call.toolview', key: 'openpencil_pipeline_begin' },
-    { name: 'tool.details.toolview', key: 'openpencil_pipeline_begin' },
     { name: 'tool.call.toolview', key: 'openpencil_pipeline_finish' },
-    { name: 'tool.details.toolview', key: 'openpencil_pipeline_finish' },
     { name: 'tool.call.toolview', key: 'design_render' },
-    { name: 'tool.details.toolview', key: 'design_render' },
     { name: 'tool.call.toolview', key: 'openpencil_pipeline_inspect' },
     { name: 'tool.call.toolview', key: 'openpencil_pipeline_batch' },
     { name: 'conversation.input.dock', id: 'openpencil-selection', order: 30 },
   ])
-  assert.equal(registrations[2].component, registrations[0].component, 'new uses the existing auto-open call view')
-  assert.equal(registrations[3].component, registrations[1].component, 'new uses the existing editor workbench details view')
-  assert.equal(registrations[4].component, registrations[0].component, 'pipeline begin uses the auto-open call view')
-  assert.equal(registrations[5].component, registrations[1].component, 'pipeline begin uses the editor details view')
-  assert.equal(registrations[6].component, registrations[0].component, 'pipeline finish uses the auto-open call view')
-  assert.equal(registrations[7].component, registrations[1].component, 'pipeline finish uses the editor details view')
-  assert.equal(registrations[10].component, registrations[0].component, 'pipeline inspect reuses the PNG gallery call view')
-  assert.equal(registrations[11].component, registrations[0].component, 'pipeline batch reuses the PNG gallery call view')
+  assert.equal(registrations[1].component, registrations[0].component, 'new uses the existing auto-open call view')
+  assert.equal(registrations[2].component, registrations[0].component, 'pipeline begin uses the auto-open call view')
+  assert.equal(registrations[3].component, registrations[0].component, 'pipeline finish uses the auto-open call view')
+  assert.equal(registrations[5].component, registrations[0].component, 'pipeline inspect reuses the PNG gallery call view')
+  assert.equal(registrations[6].component, registrations[0].component, 'pipeline batch reuses the PNG gallery call view')
 })
 
-test('stock rc.2 can leave the optional details slot undeclared', () => {
+test('the plugin never asks for a details slot the host does not declare', () => {
   const registrations = []
   const pending = []
   client.apply({
@@ -1433,7 +1430,11 @@ test('stock rc.2 can leave the optional details slot undeclared', () => {
     },
   })
 
-  assert.deepEqual(pending, ['tool.details.toolview', 'tool.details.toolview', 'tool.details.toolview', 'tool.details.toolview', 'tool.details.toolview'])
+  // This used to assert five parked injections: the plugin optimistically
+  // injected a details slot no shipped host declared, and each one waited
+  // forever. 0.1.5 removed the type that declaration named, so the plugin now
+  // asks for nothing it cannot get — `pending` must stay empty.
+  assert.deepEqual(pending, [])
   assert.deepEqual(registrations, [
     { name: 'tool.call.toolview', key: 'openpencil_render' },
     { name: 'tool.call.toolview', key: 'openpencil_new' },

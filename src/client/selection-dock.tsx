@@ -1,7 +1,6 @@
 /** Live OpenPencil selection chip rendered above the DSH composer. */
 
 import { useCallback, useSyncExternalStore } from 'react'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
   getOpenPencilSelectionSnapshot,
@@ -60,7 +59,18 @@ const styles: Record<string, React.CSSProperties> = {
   target: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'nowrap' },
 }
 
-export type OpenPencilSelectionDockProps = PropsRuntime<'conversation.input.dock'> & {
+/**
+ * Props the host passes to a `conversation.input.dock` entry, named locally.
+ *
+ * `PropsRuntime<'conversation.input.dock'>` cannot be used: the slot contract
+ * lives in dsh-client-ui-conversation's `contract/slots.d.ts`, which its
+ * `./client` entry does not re-export, so the SlotMap augmentation never
+ * enters this compilation and the lookup degrades to `never`. The dock is a
+ * session-scoped slot and this component reads only the session identity, so
+ * that is all this declares.
+ */
+export type OpenPencilSelectionDockProps = {
+  sessionId: string
   locale: PresentationLocale
 }
 

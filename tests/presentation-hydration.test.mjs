@@ -342,7 +342,7 @@ function pendingPipelineResult(overrides = {}) {
 
 function historicalEvent(callId, result, content, toolName = result.sourceTool) {
   return {
-    type: 'tool/code-dispatch',
+    type: 'tool/ptc-dispatch',
     data: {
       rootCallId: 'outer',
       parentCallId: 'outer',
@@ -370,9 +370,27 @@ async function createHarness({
   process.env.DSH_HOME = join(root, 'dsh-home')
   const render = new RenderAccessController(randomBytes(32))
   const detachRender = render.attachRoute()
+  const sessionViews = new WeakMap()
   const editorCalls = []
   const hydration = new PresentationHydrationController({
-    sessions: { get(id) { return sessions.get(String(id)) } },
+    sessions: {
+      // DSH 0.1.5 replaced `Session.events` with `snapshotEvents()`. The
+      // adapter is memoised per stored session because the production history
+      // index is keyed on the SESSION OBJECT's identity: handing back a fresh
+      // wrapper on every lookup would miss that cache every time and rescan
+      // the whole log, which is precisely what the incremental-index test
+      // below measures.
+      get(id) {
+        const stored = sessions.get(String(id))
+        if (stored === undefined) return undefined
+        let view = sessionViews.get(stored)
+        if (view === undefined) {
+          view = { snapshotEvents: () => stored.events }
+          sessionViews.set(stored, view)
+        }
+        return view
+      },
+    },
     render,
     viewer: {
       viewerGrant: {

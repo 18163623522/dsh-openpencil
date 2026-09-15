@@ -16,12 +16,18 @@ import {
 } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// DSH 0.1.5 removed @deepseek-ai/dsh-client-runtime; the client context is
+// just the cordis Context. The empty type imports below exist for their module
+// augmentations — dsh-client-ui-renderer declares ctx.slots and
+// dsh-client-ui-session declares the session props the dock reads.
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { editorPanelCopy, ManagedOpenPencilEditor } from './editor-panel.js'
-import { editorLocaleFromDsh, type EditorColorScheme, type EditorLocale } from './editor-bridge.js'
+import type { EditorColorScheme, EditorLocale } from './editor-bridge.js'
 import {
   requestOpenPencilEditor,
   type CompatibleToolCallViewProps,
@@ -1083,8 +1089,10 @@ export function apply(ctx: ClientContext): void {
   const subscribeTheme = (notify: () => void): (() => boolean) => ctx.on('theme/change', notify)
   const getColorScheme = (): EditorColorScheme => ctx.theme.getTheme().active.colorScheme
   const subscribeLocale = (notify: () => void): (() => boolean) => ctx.on('locale/change', notify)
-  const getLocale = (): PresentationLocale => ctx.locale.getLocale().active
-  const getEditorLocale = (): EditorLocale => editorLocaleFromDsh(getLocale())
+  // DSH 0.1.5's locale service reports `active` as a plain string, so narrow
+  // it here rather than asserting: an unrecognised locale falls back to 'en',
+  // which is what every copy table in this plugin already defaults to.
+  const getLocale = (): PresentationLocale => (ctx.locale.getLocale().active === 'zh' ? 'zh' : 'en')
   let editorWorkbenchHost: ReturnType<typeof mountEditorWorkbenchHost> | undefined
   if (typeof document !== 'undefined') {
     ctx.effect(() => {
@@ -1107,8 +1115,8 @@ export function apply(ctx: ClientContext): void {
       <DesignRenderView
         {...props}
         locale={locale}
-        openEditorWorkbench={request => editorWorkbenchHost?.open(request) ?? false}
-        autoOpenEditorWorkbench={request => editorWorkbenchHost?.openIfIdle(request) ?? false}
+        openEditorWorkbench={(request: EditorWorkbenchRequest) => editorWorkbenchHost?.open(request) ?? false}
+        autoOpenEditorWorkbench={(request: EditorWorkbenchRequest) => editorWorkbenchHost?.openIfIdle(request) ?? false}
       />
     )
   }
