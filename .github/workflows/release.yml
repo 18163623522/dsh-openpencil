@@ -5,17 +5,16 @@ name: Release npm packages
 # pinned OpenPencil submodule, then staged into each daemon's native
 # bin/web-bundle deploy layout.
 #
-# npm authentication boundaries:
-# 1. Trusted publishing (OIDC), enabled by id-token: write, covers every new
-#    npm publish operation.
-# 2. NPM_TOKEN is optional for a normal release, but is required to repair a
-#    missing or older dist-tag on an already-published matching version. The
-#    publish preflight rejects that recovery plan before any mutation when the
-#    token is absent.
+# npm authentication: trusted publishing (OIDC) only, enabled by
+# id-token: write in the `npm` environment; there is no token secret. Every
+# package trusts this repository and release.yml (npm-oidc-setup.sh). OIDC
+# covers npm publish but not npm dist-tag add, so repairing a dist-tag on an
+# already-published version is refused by the publish preflight — that one
+# recovery needs a human with an npm login.
 #
 # scripts/publish-release.mjs owns the multi-package invariants: native
 # packages publish before the root, an already-published matching tarball is
-# skipped (but different integrity fails), and prereleases use the next tag.
+# skipped (but different integrity fails), and every release takes the latest tag.
 
 on:
   push:
@@ -416,5 +415,7 @@ jobs:
 
       - name: Publish with idempotency and prerelease dist-tag guards
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Explicitly empty: setup-node exports a placeholder token, which the
+          # script would otherwise mistake for dist-tag repair credentials.
+          NODE_AUTH_TOKEN: ''
         run: node scripts/publish-release.mjs artifacts

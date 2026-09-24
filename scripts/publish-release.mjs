@@ -34,11 +34,12 @@ async function main(artifactRoot) {
     if (report.version !== root.version) throw new Error(`${report.name} version differs from root ${root.version}`)
   }
 
-  const tag = root.version.includes('-') ? 'next' : 'latest'
+  // Every release takes `latest`, prereleases included (see release.yml).
+  const tag = 'latest'
   const releaseReports = [...native, root]
   // Complete read-only preflight before the first registry mutation. This is
   // what prevents an old, partially published release from moving a shared
-  // next/latest tag backward after a newer release has completed.
+  // latest tag backward after a newer release has completed.
   const canRepairExistingTag = Boolean(process.env.NODE_AUTH_TOKEN?.trim())
   preflightRelease(releaseReports, tag, report => readReleaseState(report, tag), canRepairExistingTag)
   for (const report of releaseReports) await publishOrVerify(report, tag, canRepairExistingTag)
