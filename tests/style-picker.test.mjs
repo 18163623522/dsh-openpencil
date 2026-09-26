@@ -112,41 +112,148 @@ class FakeProvider {
   }
 }
 
+const CLEAN_QUALITY = {
+  geometryIssues: [], layoutIssues: [], contrastIssues: [], iconIssues: [],
+  structureIssues: [], emptyShells: [], intentQuestions: [], variableIssues: [],
+  imageSlots: [], navIssues: [],
+}
+
+function documentFromSeedCanvasScript(script) {
+  const match = /^I\(null, (\{.*\})\);$/u.exec(script)
+  assert.ok(match, `unexpected internal seed script: ${script}`)
+  return {
+    version: '1.0.0',
+    children: [{ ...JSON.parse(match[1]), id: 'root', children: [] }],
+  }
+}
+
 class FakeDraftController {
-  beginCalls = []
   calls = []
+  beginCalls = []
   screenshotCalls = []
   png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64',
   )
   version = 0
+  finalized = false
+  screenshotVersion
   documentJson = JSON.stringify({ version: '1.0.0', children: [] })
+  quality = CLEAN_QUALITY
+  lint = { count: 0, issues: [] }
+  layout = { layout: [], layoutIssues: [] }
+  batchValue = { applied: true, layoutIssues: [] }
+  finalizeValue = { applied: true, advisories: [] }
+  seedScripts = []
+  userBatchScripts = []
+  restoreCalls = []
+
   async begin(options) {
     this.beginCalls.push(options)
-    return { draftId: DRAFT_ID, target: options.target, version: this.version, createdAt: 123 }
+    return {
+      draftId: DRAFT_ID,
+      target: options.target,
+      version: this.version,
+      createdAt: 123,
+      token: 'must-not-escape',
+      daemonPath: '/private/tmp/dsh-openpencil-draft-secret/draft.op',
+    }
   }
-  async call(draftId, owner, tool, args) {
-    this.calls.push({ draftId, owner, tool, args })
-    if (tool === 'batch_design' || tool === 'apply_design_system') {
+
+  async call(draftId, owner, tool, args, options) {
+    this.calls.push({ draftId, owner, tool, args, options })
+    let changed = false
+    let value
+    if (tool === 'get_design_agent_prompt') value = { prompt: 'complete native prompt', verifyProtocol: 'screenshot' }
+    else if (tool === 'get_editor_state') value = { activePageId: 'page-1' }
+    else if (tool === 'get_style_guide_tags') value = { tags: ['editorial'] }
+    else if (tool === 'get_variables') value = { variables: {} }
+    else if (tool === 'get_design_quality') value = this.quality
+    else if (tool === 'lint_document') value = this.lint
+    else if (tool === 'snapshot_layout') value = this.layout
+    else if (tool === 'enrich_images') value = { enriched: true }
+    else if (tool === 'batch_design' || tool === 'apply_design_system') {
+      value = tool === 'batch_design' ? this.batchValue : { applied: true, layoutIssues: [] }
+      if (tool === 'batch_design' && typeof args.script === 'string') {
+        if (/^I\(null,/u.test(args.script)) {
+          this.seedScripts.push(args.script)
+          const current = JSON.parse(this.documentJson)
+          if (!Array.isArray(current.children) || current.children.length === 0) {
+            this.documentJson = JSON.stringify(documentFromSeedCanvasScript(args.script))
+          }
+        } else {
+          this.userBatchScripts.push(args.script)
+        }
+      }
       this.version += 1
-      return { applied: true, changed: true, value: { applied: true }, version: this.version }
-    }
-    if (tool === 'get_design_quality') {
-      return { geometryIssues: [], layoutIssues: [], contrastIssues: [], iconIssues: [], structureIssues: [], emptyShells: [], intentQuestions: [], variableIssues: [], imageSlots: [], navIssues: [] }
-    }
-    if (tool === 'lint_document') return { count: 0, issues: [] }
-    if (tool === 'snapshot_layout') return { layout: [], layoutIssues: [] }
-    return { ok: true }
+      changed = true
+      this.screenshotVersion = undefined
+    } else if (tool === 'finalize_design') {
+      value = this.finalizeValue
+      if (!this.finalized) {
+        this.finalized = true
+        this.version += 1
+        changed = true
+        this.screenshotVersion = undefined
+      }
+    } else value = { ok: true }
+    return { draftId, tool, value, text: JSON.stringify(value), version: this.version, changed, hasImage: false }
   }
-  async snapshot() { return { version: this.version, documentJson: this.documentJson } }
-  async screenshot() {
-    this.screenshotCalls.push(1)
-    return { version: this.version, documentSha256: '0'.repeat(64), png: this.png }
+
+  finalize(draftId, owner, options) {
+    return this.call(draftId, owner, 'finalize_design', {}, options)
   }
-  async finalize() { this.version += 1; return { applied: true, advisories: [], version: this.version } }
+
+  async snapshot(draftId) {
+    return { draftId, version: this.version, documentJson: this.documentJson }
+  }
+
+  async restoreSnapshot(draftId, owner, snapshot, options = {}) {
+    this.restoreCalls.push({ draftId, owner, snapshot, options })
+    if (options.expectedVersion !== undefined) assert.equal(this.version, options.expectedVersion)
+    this.documentJson = snapshot.documentJson
+    this.version += 1
+    this.screenshotVersion = undefined
+    this.finalized = false
+    return { draftId, version: this.version, documentJson: this.documentJson }
+  }
+
+  async screenshot(draftId, owner, options) {
+    this.screenshotCalls.push({ draftId, owner, options })
+    if (options.nodeId === undefined || options.nodeId === 'root') this.screenshotVersion = this.version
+    return {
+      draftId,
+      version: this.version,
+      documentSha256: createHash('sha256').update(this.documentJson).digest('hex'),
+      bytes: this.png,
+      mimeType: 'image/png',
+      metadata: { width: 390, height: 844 },
+    }
+  }
+
+  async finish(draftId, owner, options) {
+    if (options.expectedVersion !== undefined
+      && (options.expectedVersion !== this.version
+        || options.expectedDocumentSha256 !== createHash('sha256').update(this.documentJson).digest('hex'))) {
+      this.screenshotVersion = undefined
+      this.finalized = false
+      const error = new Error('checkpoint drift')
+      error.code = 'OPENPENCIL_DRAFT_CHECKPOINT_DRIFT'
+      error.currentVersion = this.version
+      throw error
+    }
+    if (this.screenshotVersion !== this.version) {
+      const error = new Error('current preview required')
+      error.code = 'OPENPENCIL_DRAFT_PREVIEW_REQUIRED'
+      error.currentVersion = this.version
+      throw error
+    }
+    const published = await options.publish({ draftId, version: this.version, documentJson: this.documentJson })
+    return { draftId, version: this.version, published }
+  }
+
   async abort() {}
-  async restoreSnapshot() { return { version: this.version, documentJson: this.documentJson } }
+  async abortOwner() { return 1 }
   async dispose() {}
 }
 
@@ -173,7 +280,7 @@ async function createHarness(options = {}) {
     async createDocumentSnapshot(text) { return createDocumentSnapshotFromText(text) },
     ...(options.styleProvider !== undefined ? { styleProvider: options.styleProvider } : {}),
     ...(options.styleClock !== undefined ? { styleClock: options.styleClock } : {}),
-    ...(options.styleCatalog !== undefined ? { styleCatalog: options.styleCatalog } : {}),
+    ...(options.styleCatalog === undefined ? { styleCatalog: fixtureCatalog() } : { styleCatalog: options.styleCatalog }),
     ...(options.styleHandoff !== undefined ? { styleHandoff: options.styleHandoff } : {}),
   })
   const tools = Object.fromEntries(controller.createTools().map(tool => [tool.name, tool]))
@@ -259,12 +366,12 @@ test('catalog adapter: theme metadata comes only from tags, never guessed from n
 
 test('A2: installed guide without a regex rule stays browseable, searchable and selectable with the model off', async () => {
   const harness = await createHarness({ styleCatalog: loadInstalledStyleCatalog() })
-  const plan = await harness.tools.openpencil_style_plan.execute({ brief: WEB_BRIEF, query: 'banxin' }, harness.exec)
-  // banxin-rule has no GUIDE_RULES row; it must still surface.
-  assert.ok(plan.guides.some(g => g.id === 'banxin-rule'), 'regex-unreachable guide must appear in browse/search')
+  const plan = await harness.tools.openpencil_style_plan.execute({ brief: WEB_BRIEF, query: 'agency-editorial' }, harness.exec)
+  // agency-editorial-light has no GUIDE_RULES row; it must still surface.
+  assert.ok(plan.guides.some(g => g.id === 'agency-editorial-light'), 'regex-unreachable guide must appear in browse/search')
   assert.equal(plan.mode, 'manual')
-  const selection = await confirmGuide(harness, 'banxin-rule')
-  assert.equal(selection.confirmed.guideId, 'banxin-rule')
+  const selection = await confirmGuide(harness, 'agency-editorial-light')
+  assert.equal(selection.confirmed.guideId, 'agency-editorial-light')
   assert.match(selection.confirmed.handle, /^sel_[0-9a-f]{16,}$/u)
 })
 
@@ -531,7 +638,7 @@ test('A9: timeout keeps manual selection usable, never auto-retries, and stale r
   // Duplicate request in the same revision returns the same pending/result identity.
   const dupHarness = await createHarness({
     styleProvider: new FakeProvider({
-      response: { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.3, 'fixture-mono-dark': 0.7 }, confidence: 0.9 },
+      response: { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.3, 'fixture-mono-dark': 0.7, [ABSTAIN_SENTINEL]: 0 }, confidence: 0.9 },
     }),
   })
   const one = await dupHarness.tools.openpencil_style_plan.execute({ brief: WEB_BRIEF, recommend: true }, dupHarness.exec)
@@ -541,8 +648,8 @@ test('A9: timeout keeps manual selection usable, never auto-retries, and stale r
   // A changed brief creates a new revision; the old revision's late result is discarded.
   const lateProvider = new FakeProvider({
     response: (input, count) => {
-      if (input.brief.includes('changed')) return { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.1, 'fixture-mono-dark': 0.9 }, confidence: 0.9 }
-      return { choice: 'fixture-editorial-light', probabilities: { 'fixture-editorial-light': 0.9, 'fixture-mono-dark': 0.1 }, confidence: 0.9 }
+      if (input.brief.includes('changed')) return { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.1, 'fixture-mono-dark': 0.9, [ABSTAIN_SENTINEL]: 0 }, confidence: 0.9 }
+      return { choice: 'fixture-editorial-light', probabilities: { 'fixture-editorial-light': 0.9, 'fixture-mono-dark': 0.1, [ABSTAIN_SENTINEL]: 0 }, confidence: 0.9 }
     },
   })
   const lateHarness = await createHarness({ styleProvider: lateProvider })
@@ -573,7 +680,7 @@ test('A16: expired or cross-session handles are unusable; retention stays sessio
   const other = await confirmGuide(fresh, 'fixture-editorial-light')
   await assert.rejects(
     fresh.tools.openpencil_pipeline_begin.execute(
-      { path: 'design.op', brief: WEB_BRIEF, skip_visual_review: true, style_selection: other.handle },
+      { path: 'design.op', brief: WEB_BRIEF, skip_visual_review: true, style_selection: other.confirmed.handle },
       fresh.execFor('another-session'),
     ),
     /selection_error|session/iu,
@@ -582,30 +689,32 @@ test('A16: expired or cross-session handles are unusable; retention stays sessio
 
 test('A20: catalog drift requires fresh confirmation and binds the new handle to the new hash', async () => {
   const original = fixtureCatalog()
-  const harness = await createHarness({ styleCatalog: original })
+  let currentCatalog = original
+  const harness = await createHarness({ styleCatalog: () => currentCatalog })
   const { confirmed } = await confirmGuide(harness, 'fixture-editorial-light')
   assert.equal(confirmed.catalogRevision, original.revision)
 
-  const drifted = loadStyleCatalog({
+  currentCatalog = loadStyleCatalog({
     guides: FIXTURE_GUIDES.map(guide => guide.name === 'fixture-editorial-light'
       ? { ...guide, summary: 'A calm editorial web guide with warmer paper tones.' }
       : guide),
   })
-  const driftHarness = await createHarness({ styleCatalog: drifted })
-  const refreshed = await driftHarness.tools.openpencil_style_plan.execute(
+  const drifted = currentCatalog
+  const refreshed = await harness.tools.openpencil_style_plan.execute(
     { brief: WEB_BRIEF, guide: 'fixture-editorial-light' },
-    driftHarness.exec,
+    harness.exec,
   )
   assert.equal(refreshed.catalogRevision, drifted.revision)
   assert.equal(refreshed.previousChoice?.status, 'provisional', 'previous choice shows as provisional after drift')
   assert.equal(refreshed.confirmable, true)
-  const reconfirmed = await driftHarness.tools.openpencil_style_confirm.execute({ guide: 'fixture-editorial-light' }, driftHarness.exec)
+  const reconfirmed = await harness.tools.openpencil_style_confirm.execute({ guide: 'fixture-editorial-light' }, harness.exec)
   assert.equal(reconfirmed.status, 'confirmed')
   assert.equal(reconfirmed.catalogRevision, drifted.revision)
   assert.notEqual(reconfirmed.catalogRevision, original.revision)
+  assert.notEqual(reconfirmed.handle, confirmed.handle, 'a fresh confirmation issues a new handle')
   // A handle issued against the old hash does not begin a draft on the new catalog.
-  await assert.rejects(beginWithSelection(driftHarness, confirmed.handle), /selection_error|catalog/iu)
-  assert.equal(driftHarness.draft.beginCalls.length, 0)
+  await assert.rejects(beginWithSelection(harness, confirmed.handle), /selection_error|catalog/iu)
+  assert.equal(harness.draft.beginCalls.length, 0)
 })
 
 // ===========================================================================
@@ -694,7 +803,7 @@ test('A13: the advisory planner never generates canvases, .op files or native in
 
 test('A14: injection-shaped brief and catalog text are treated as data; the response schema is enforced', async () => {
   const provider = new FakeProvider({
-    response: { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.3, 'fixture-mono-dark': 0.7 }, confidence: 0.9 },
+    response: { choice: 'fixture-mono-dark', probabilities: { 'fixture-editorial-light': 0.3, 'fixture-mono-dark': 0.7, [ABSTAIN_SENTINEL]: 0 }, confidence: 0.9 },
   })
   const poisoned = loadStyleCatalog({
     guides: FIXTURE_GUIDES.map(guide => guide.name === 'fixture-editorial-light'
