@@ -61,6 +61,19 @@ import {
   validateAgentRunTimeoutSeconds,
 } from './design-agent-run.js'
 import type { PipelineEngine } from './design-agent-run.js'
+import {
+  asSelectedStyleGuide,
+  loadInstalledStyleCatalog,
+  selectedStyleOf,
+  type SelectedStyleSection,
+  type StyleCatalogGuide,
+  type StyleCatalogSnapshot,
+} from './style-catalog.js'
+import {
+  createStylePlannerTools,
+  createStyleSelectionStore,
+  type StyleRecommendationProvider,
+} from './style-planner.js'
 
 const MAX_BRIEF_LENGTH = 64 * 1024
 const MAX_BATCH_LENGTH = 256 * 1024
@@ -77,7 +90,7 @@ const MAX_FINISH_REPAIR_ROUNDS = 2
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const EXPLICIT_MOBILE_BRIEF = /(?:\b(?:mobile|phone|iphone|ios|android)\b|移动(?:端|应用|界面)?|手机(?:端|应用|界面)?)/iu
 const EXPLICIT_CANVAS_SIZE = /(?:^|\D)(\d{3,4})\s*(?:x|×|✕|\*)\s*(\d{3,5})(?:\D|$)/iu
-const COMMERCE_BRIEF = /(?:\b(?:e-?commerce|shop|shopping|storefront|retail)\b|电商|商城|购物|商品|商店)/iu
+export const COMMERCE_BRIEF = /(?:\b(?:e-?commerce|shop|shopping|storefront|retail)\b|电商|商城|购物|商品|商店)/iu
 
 /**
  * Heal the canonical page-wrapper slip: a script whose FIRST creation call is
@@ -149,6 +162,14 @@ export interface DesignDraftToolServices {
   observe(target: FsTarget, observation: FsObservation, exec: ToolRunContext): void
   /** Test seam and pre-commit artifact builder; defaults to the real cache. */
   createDocumentSnapshot?: typeof createDocumentSnapshotFromText
+  /** Optional advisory provider fixture; the planner ships off by default. */
+  styleProvider?: StyleRecommendationProvider
+  /** Test seam for handle expiry; defaults to the wall clock. */
+  styleClock?: () => number
+  /** Test seam over the installed catalog snapshot (value or loader). */
+  styleCatalog?: StyleCatalogSnapshot | (() => StyleCatalogSnapshot)
+  /** Whether begin exposes the style_selection handoff input; default true. */
+  styleHandoff?: { enabled: boolean }
 }
 
 interface PendingPublication {
@@ -167,6 +188,8 @@ interface PendingPublication {
   generationCorrectionAttempted: Set<number>
   engine: PipelineEngine
   brief: string
+  /** Immutable confirmed style section fixed for the whole draft (§4). */
+  selectedStyle?: JsonValue
   agentRunUsed: boolean
   repairAuthorized: boolean
   repairAttemptCount: number
@@ -276,6 +299,8 @@ export interface PublishedDraft {
   preview: RenderFrame
   document: DocumentSnapshot
   note: string
+  /** Immutable confirmed style section retained through publication (§4). */
+  selectedStyle?: JsonValue
 }
 
 /** Compact unpublished result projected into the live editor workbench. */
@@ -524,7 +549,7 @@ function latestDirectUserText(exec: ToolRunContext): string | undefined {
   return undefined
 }
 
-function draftCanvasContract(brief: string, directUserText?: string): DraftCanvasContract {
+export function draftCanvasContract(brief: string, directUserText?: string): DraftCanvasContract {
   // Platform and viewport are user intent, not design-agent creative choices.
   // The model-facing `brief` may expand the requested content, but it must not
   // silently turn an ordinary desktop/web request into a mobile composition.
@@ -952,6 +977,14 @@ export class DesignDraftToolController {
   readonly #pending = new Map<string, PendingPublication>()
   readonly #editorHost: EditorHostController
   readonly #services: DesignDraftToolServices
+  readonly #styleStore = createStyleSelectionStore({ now: () => this.#styleNow() })
+  readonly #resolveStyleCatalog = (): StyleCatalogSnapshot => {
+    const catalog = this.#services.styleCatalog
+    if (catalog === undefined) return loadInstalledStyleCatalog()
+    return typeof catalog === 'function' ? catalog() : catalog
+  }
+  readonly #styleNow = (): number => this.#services.styleClock?.() ?? Date.now()
+  readonly #styleHandoffEnabled = (): boolean => this.#services.styleHandoff?.enabled !== false
   #disposed = false
   #disposePromise: Promise<void> | undefined
 
@@ -970,6 +1003,13 @@ export class DesignDraftToolController {
       this.#inspectTool(),
       this.#finishTool(),
       this.#abortTool(),
+      ...createStylePlannerTools({
+        store: this.#styleStore,
+        resolveCatalog: this.#resolveStyleCatalog,
+        ...(this.#services.styleProvider === undefined ? {} : { provider: this.#services.styleProvider }),
+        now: this.#styleNow,
+        beginStyleInputSupported: this.#styleHandoffEnabled,
+      }),
     ] as const
   }
 
@@ -1017,7 +1057,9 @@ export class DesignDraftToolController {
         path: { type: 'string', description: 'Optional new workspace-relative or absolute .op target. Omit it unless the user explicitly named a file; the plugin creates a concrete collision-resistant filename. An explicit target must not exist and is preserved exactly.' },
         brief: { type: 'string', required: true, description: 'The user\'s design request. Preserve it; do not invent a mobile platform when none was requested.' },
         skip_visual_review: { type: 'boolean', description: 'Optional. True skips the single post-finalization visual-review round and publishes directly after a clean quality gate.' },
-        engine: { type: 'string', enum: ['script', 'app-agent'], description: 'Optional. Default "script" (the ordinary two-batch flow). "app-agent" runs the OpenPencil App builtin design-agent loop on the daemon instead — use only when the user explicitly asks for the high-fidelity App-identical engine.' },
+        ...(this.#styleHandoffEnabled() ? {
+          style_selection: { type: 'string', description: 'Optional live style-selection handle from openpencil_style_confirm. Validated against the current catalog, this brief, platform, session, and its 15-minute expiry before any draft is created; a valid selection fixes the guide for the whole draft. Omit for the ordinary automatic flow.' },
+        } : {}),
       },
       output: {
         schema: { type: 'object', additionalProperties: true },
@@ -1030,7 +1072,7 @@ export class DesignDraftToolController {
           return projectDocumentGrant(value, services.render, editor)
         },
       },
-      execute: async (args: { path?: string; brief: string; skip_visual_review?: boolean; engine?: string }, exec) => {
+      execute: async (args: { path?: string; brief: string; skip_visual_review?: boolean; engine?: string; style_selection?: string }, exec) => {
         const engine = parsePipelineEngine(args.engine, OPENPENCIL_PIPELINE_BEGIN_TOOL_NAME)
         const brief = args.brief.trim()
         const requestedPath = args.path?.trim() || defaultDraftPath(brief)
@@ -1041,14 +1083,22 @@ export class DesignDraftToolController {
         const canvas = draftCanvasContract(brief, directUserText)
         const commerceIntent = COMMERCE_BRIEF.test(directUserText ?? brief)
         const briefText = directUserText ?? brief
+        // Opt-in style handoff (spec §4): validate the confirmed selection
+        // against the current catalog, unchanged brief, platform, principal
+        // and expiry BEFORE any draft or editor exists, and never silently
+        // downgrade a confirmed choice to the ordinary automatic flow.
+        const selection = this.#resolveStyleSelection(exec, args, briefText, canvas, commerceIntent, engine)
         // App-alignment: match the brief onto the vendored style-guide and
         // domain-skill corpora. Desktop commerce keeps its hardwired builtin
         // direction (the generation contract pins its exact CTA colors), so a
         // guide only overrides where the contract text is palette-neutral.
+        // A confirmed catalog selection bypasses automatic picking entirely.
         const fallbackPalette = commerceIntent ? ECOMMERCE_PALETTE : DESIGN_PALETTE
-        const styleGuide = commerceIntent && canvas.platform === 'web'
-          ? undefined
-          : selectStyleGuide(briefText, canvas.platform, fallbackPalette)
+        const styleGuide = selection !== undefined
+          ? asSelectedStyleGuide(selection.guide, fallbackPalette)
+          : commerceIntent && canvas.platform === 'web'
+            ? undefined
+            : selectStyleGuide(briefText, canvas.platform, fallbackPalette)
         const domainGuidance = selectDomainGuidance(briefText, canvas.platform)
         const owner = ownerSessionId(exec)
         // A duplicate begin is the classic recovery spiral: without the live
@@ -1142,6 +1192,7 @@ export class DesignDraftToolController {
             visualReviewDone: false,
             visualReviewAuthorized: false,
             repairAttemptCount: 0,
+            ...(selection === undefined ? {} : { selectedStyle: asJson(selection.section) }),
           })
           return {
             draftId: begun.draftId,
@@ -1150,7 +1201,10 @@ export class DesignDraftToolController {
             ...(begun.createdAt === undefined ? {} : { createdAt: begun.createdAt }),
             platform: canvas.platform,
             canvas: asJson(canvas),
-            buildContract: compactBuildContract(canvas, commerceIntent, domainGuidance),
+            buildContract: {
+              ...compactBuildContract(canvas, commerceIntent, domainGuidance) as Record<string, JsonValue>,
+              ...(selection === undefined ? {} : { selectedStyle: asJson(selection.section) }),
+            },
             rootNodeId,
             continuationStyle: designContinuationStyle(canvas, commerceIntent, styleGuide),
             editorState: {},
@@ -1179,6 +1233,86 @@ export class DesignDraftToolController {
         ? { card: 'generic', title: 'Begin OpenPencil pipeline', kind: 'execute' }
         : { card: 'generic', title: `Begin OpenPencil pipeline for ${args.path}`, kind: 'execute', locations: [{ path: args.path }] },
     })
+  }
+
+  /**
+   * Resolve the optional confirmed style selection (spec §4) before any draft
+   * or editor exists: unsupported modes are explained, the handle is validated
+   * against the current catalog, the unchanged brief, the platform, the
+   * owning session and its 15-minute expiry, and a confirmed-choice session
+   * can never masquerade as an ordinary call by omitting the handle. Returns
+   * the selected guide plus its immutable contract section, or `undefined`
+   * for the ordinary automatic flow.
+   */
+  #resolveStyleSelection(
+    exec: ToolRunContext,
+    args: { style_selection?: string },
+    briefText: string,
+    canvas: DraftCanvasContract,
+    commerceIntent: boolean,
+    engine: PipelineEngine,
+  ): { guide: StyleCatalogGuide; section: SelectedStyleSection } | undefined {
+    const name = OPENPENCIL_PIPELINE_BEGIN_TOOL_NAME
+    const sessionKey = ownerSessionId(exec)
+    const fingerprint = this.#styleStore.briefFingerprintOf(briefText)
+    const handle = args.style_selection?.trim()
+    if (handle === undefined || handle === '') {
+      const live = this.#styleStore.liveConfirmedFor(sessionKey, fingerprint, this.#styleNow())
+      if (live !== undefined) {
+        throw new Error(
+          `${name}: selection_error: this session has a confirmed style choice for this brief (${live.guideId}); `
+          + 'pass its live handle in style_selection, or have the designer explicitly abandon the selection before requesting ordinary generation',
+        )
+      }
+      return undefined
+    }
+    if (!this.#styleHandoffEnabled()) {
+      throw new Error(`${name}: selection_error: selection_handoff_unsupported: this host does not expose the style-selection handoff`)
+    }
+    if (engine === 'app-agent') {
+      throw new Error(`${name}: selection_error: app-agent handoffs are unsupported in v1; a confirmed selection applies only to the ordinary script engine`)
+    }
+    if (commerceIntent) {
+      throw new Error(
+        `${name}: selection_error: ${canvas.platform === 'web' ? 'web-commerce' : 'commerce'} handoffs are unsupported in v1; `
+        + 'web commerce keeps its pinned ecommerce direction and no chosen catalog guide overrides it',
+      )
+    }
+    const snapshot = this.#resolveStyleCatalog()
+    const verdict = this.#styleStore.validate(handle, {
+      sessionKey,
+      briefFingerprint: fingerprint,
+      platform: canvas.platform,
+      catalogRevision: snapshot.revision,
+      now: this.#styleNow(),
+    })
+    if (!verdict.ok) {
+      const detail: Record<string, string> = {
+        unknown: 'unknown selection handle',
+        consumed: 'the selection handle was already used by a draft; reconfirm the choice for a new draft',
+        expired: 'the selection handle expired (15-minute lifetime); revalidate and reconfirm the choice',
+        session: 'the selection handle is bound to another DSH session or principal',
+        brief: 'the brief changed after confirmation; reconfirm the choice against the unchanged brief',
+        platform: 'the selection handle was confirmed for a different platform',
+        constraints: 'the confirmed constraints changed after confirmation',
+        catalog: 'the catalog changed after confirmation (catalog drift); reconfirm to bind the new catalog revision',
+        guide: 'the selected guide no longer matches the handle',
+      }
+      throw new Error(`${name}: selection_error: ${detail[verdict.reason]}`)
+    }
+    const guide = snapshot.guides.find(candidate => candidate.id === verdict.record.guideId)
+    if (guide === undefined) {
+      throw new Error(`${name}: selection_error: the confirmed guide is no longer installed in the catalog; reconfirm against the current catalog`)
+    }
+    const catalogPlatform = canvas.platform === 'web' ? 'webapp' : 'mobile'
+    if (guide.platform !== catalogPlatform) {
+      throw new Error(`${name}: selection_error: the confirmed guide (${guide.platform}) does not support this draft's ${canvas.platform} platform`)
+    }
+    this.#styleStore.consume(handle)
+    return {
+      guide,
+      section: selectedStyleOf(guide, snapshot, commerceIntent ? ECOMMERCE_PALETTE : DESIGN_PALETTE),
+    }
   }
 
   #contextTool() {
@@ -1492,6 +1626,7 @@ export class DesignDraftToolController {
           generationScriptLimit: 2,
           ...(rootNodeId === undefined ? {} : { rootNodeId }),
           batch: publicBatchReceipt(batch.value),
+          ...(pending.selectedStyle === undefined ? {} : { selectedStyle: pending.selectedStyle }),
           canvas: asJson(pending.canvas),
           canvasCheck: {
             valid: pending.canvasValidated,
@@ -2010,6 +2145,7 @@ export class DesignDraftToolController {
             diagnostics: [],
             canContinue: true,
             next: 'Quality gates passed and the exact final preview was rendered. Review the digest (and preview) against every checklist item. If everything holds, call finish exactly once more with no batch in between to publish. Otherwise send exactly ONE bounded correction batch (I/K/U only, at most 16 calls and 6 KiB, never rebuilding Header or Hero), then call finish; the gates re-validate the corrected page.',
+            ...(pending.selectedStyle === undefined ? {} : { selectedStyle: pending.selectedStyle }),
           } as Record<string, JsonValue>
         }
         pending.visualReviewAuthorized = false
@@ -2115,6 +2251,7 @@ export class DesignDraftToolController {
                 preview,
                 document,
                 note: `Published ${pending.processPath} atomically after native quality, lint, layout, render-integrity, and DSH quality gates. The exact final PNG user preview and live editor are already attached; stop now.`,
+                ...(pending.selectedStyle === undefined ? {} : { selectedStyle: pending.selectedStyle }),
               }
             },
           })
