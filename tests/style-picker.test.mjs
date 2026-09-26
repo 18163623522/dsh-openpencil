@@ -722,18 +722,58 @@ test('A20: catalog drift requires fresh confirmation and binds the new handle to
 // ====================================================================================
 
 test('A10: catalog/brief/principal/platform change before begin is rejected before draft or editor creation', async () => {
+  const assertNoDraft = (h, leg) => {
+    assert.equal(h.draft.beginCalls.length, 0, `${leg}: begin must be rejected before any draft creation`)
+    assert.equal(h.draft.calls.length, 0, `${leg}: no seed, regex-driven or native call may run (no regex fallback)`)
+  }
+
+  // Brief changed between confirm and begin.
   const harness = await createHarness()
   const { confirmed } = await confirmGuide(harness, 'fixture-editorial-light', WEB_BRIEF)
-  // Brief changed between confirm and begin.
   await assert.rejects(
     beginWithSelection(harness, confirmed.handle, 'A completely different brief about mountain bikes'),
-    /selection_error|brief/iu,
+    /selection_error.*brief/iu,
   )
-  // Platform changed: confirm on web, begin brief resolves mobile.
-  const mobileConfirmed = await confirmGuide(harness, 'fixture-editorial-light', MOBILE_BRIEF, { platform: 'mobile' })
-  assert.equal(mobileConfirmed.confirmed.status, 'conflict', 'fixture-editorial-light is webapp-only; mobile is a hard platform conflict')
-  assert.equal(harness.draft.beginCalls.length, 0)
-  assert.equal(harness.draft.calls.length, 0)
+  assertNoDraft(harness, 'brief change')
+
+  // Principal changed between confirm and begin: the same handle from another session.
+  await assert.rejects(
+    harness.tools.openpencil_pipeline_begin.execute(
+      { path: 'design.op', brief: WEB_BRIEF, skip_visual_review: true, style_selection: confirmed.handle },
+      harness.execFor('principal-b'),
+    ),
+    /selection_error.*session/iu,
+  )
+  assertNoDraft(harness, 'principal change')
+
+  // Platform changed between confirm and begin: the handle is confirmed for an
+  // explicitly mobile plan, but the begin brief resolves web. Same brief text,
+  // so the platform mismatch is the only delta.
+  const mobilePlan = await harness.tools.openpencil_style_plan.execute(
+    { brief: WEB_BRIEF, platform: 'mobile', guide: 'fixture-quiet-mobile' },
+    harness.exec,
+  )
+  assert.equal(mobilePlan.confirmable, true)
+  const mobileConfirmed = await harness.tools.openpencil_style_confirm.execute({ guide: 'fixture-quiet-mobile' }, harness.exec)
+  assert.equal(mobileConfirmed.status, 'confirmed')
+  await assert.rejects(
+    beginWithSelection(harness, mobileConfirmed.handle, WEB_BRIEF),
+    /selection_error.*platform/iu,
+  )
+  assertNoDraft(harness, 'platform change')
+
+  // Catalog changed between confirm and begin: the old handle is bound to the
+  // old catalog revision and must not begin a draft on the drifted catalog.
+  let currentCatalog = fixtureCatalog()
+  const driftHarness = await createHarness({ styleCatalog: () => currentCatalog })
+  const driftConfirmed = await confirmGuide(driftHarness, 'fixture-editorial-light')
+  currentCatalog = loadStyleCatalog({
+    guides: FIXTURE_GUIDES.map(guide => guide.name === 'fixture-editorial-light'
+      ? { ...guide, summary: 'A calm editorial web guide with warmer paper tones.' }
+      : guide),
+  })
+  await assert.rejects(beginWithSelection(driftHarness, driftConfirmed.confirmed.handle), /selection_error.*catalog/iu)
+  assertNoDraft(driftHarness, 'catalog change')
 })
 
 test('A11: confirmed selection propagates an immutable selectedStyle section through begin, both batches and finish', async () => {
