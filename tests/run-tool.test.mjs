@@ -68,6 +68,11 @@ function runTool(tool, args, output) {
         ...process.env,
         DSH_SOURCE_ROOT: '',
         RUN_TOOL_TEST_OUTPUT: output,
+        // The script also scans the invoking user's ~/.dsh/source bundles; a
+        // machine with an installed DSH would otherwise leak their @types into
+        // the forwarded typeRoots. Point HOME at the hermetic test tree so the
+        // assertion covers exactly the roots this test provisions.
+        HOME: testRoot,
       },
     },
   )
