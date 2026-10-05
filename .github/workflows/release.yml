@@ -413,6 +413,9 @@ jobs:
           pattern: package-*
           path: artifacts
 
+      - name: Verify registry convergence and release guards
+        run: npm run test:release-publish
+
       - name: Publish with idempotency and prerelease dist-tag guards
         env:
           # Explicitly empty: setup-node exports a placeholder token, which the

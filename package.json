@@ -69,7 +69,8 @@
     "release:check": "node scripts/check-release-version.mjs",
     "pack:artifact": "node scripts/pack-package.mjs",
     "verify:install": "node scripts/verify-selective-install.mjs",
-    "release:publish": "node scripts/publish-release.mjs"
+    "release:publish": "node scripts/publish-release.mjs",
+    "test:release-publish": "node --test tests/registry-convergence.test.mjs && node scripts/publish-release.mjs --self-test"
   },
   "packageManager": "pnpm@10.12.1",
   "pnpm": {

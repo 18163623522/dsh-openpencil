@@ -5,6 +5,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { publishAndVerify } from './registry-convergence.mjs'
 import { platforms } from './platforms.mjs'
 
 if (process.argv.includes('--self-test')) runSelfTest()
@@ -80,29 +81,11 @@ async function publishOrVerify(report, tag, canRepairExistingTag) {
   }
 
   const tarball = join(report.directory, report.filename)
-  runNpm(['publish', tarball, '--access=public', `--tag=${tag}`, '--provenance'])
-  let lastTag
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
-    const visible = registryIntegrity(specifier)
-    if (visible === report.integrity) {
-      lastTag = distTagVersion(report.name, tag)
-      if (lastTag === report.version) {
-        process.stdout.write(`${specifier} published with dist-tag ${tag}\n`)
-        return
-      }
-      process.stdout.write(`${specifier} integrity is visible but dist-tag ${tag} is ${JSON.stringify(lastTag)} (attempt ${attempt}/30)\n`)
-    } else {
-      if (visible !== undefined && visible !== report.integrity) {
-        throw new Error(`${specifier} became visible with unexpected integrity ${visible}`)
-      }
-      process.stdout.write(`${specifier} not visible yet (attempt ${attempt}/30)\n`)
-    }
-    if (attempt < 30) await delay(10_000)
-  }
-  throw new Error(
-    `${specifier} was published but registry visibility did not converge; `
-    + `expected integrity ${report.integrity} and dist-tag ${tag}=${report.version}, last tag=${JSON.stringify(lastTag)}`,
-  )
+  await publishAndVerify({
+    specifier, version: report.version, integrity: report.integrity, tag,
+    publish: () => npmResult(['publish', tarball, '--access=public', `--tag=${tag}`, '--provenance']),
+    readState: () => ({ integrity: registryIntegrity(specifier), tag: distTagVersion(report.name, tag) }),
+  })
 }
 
 function readReleaseState(report, tag) {
