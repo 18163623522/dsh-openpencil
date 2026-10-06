@@ -98,8 +98,9 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
 
     assert.deepEqual(inject, ['tools', 'sessions', 'fs', 'sandboxPolicy'])
     assert.deepEqual(injectedServices, [['skills'], ['systemPrompt'], ['webServer']])
-    // 12 = 5 legacy/compat tools + 7 pipeline tools (begin/context/batch/agent_run/inspect/finish/abort).
-    assert.equal(registeredTools.length, 12)
+    // 14 = 5 legacy/compat tools + 7 pipeline tools (begin/context/batch/agent_run/inspect/finish/abort)
+    //   + 2 opt-in style planner tools (style_plan/style_confirm).
+    assert.equal(registeredTools.length, 14)
     assert.deepEqual(registeredTools.map(tool => tool.name), [
       'openpencil_render',
       'openpencil_selection',
@@ -113,6 +114,8 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
       'openpencil_pipeline_inspect',
       'openpencil_pipeline_finish',
       'openpencil_pipeline_abort',
+      'openpencil_style_plan',
+      'openpencil_style_confirm',
     ])
     assert.equal(registeredTools.some(tool => tool.name === 'design_render'), false, 'legacy render alias must remain client-only')
     const registeredByName = Object.fromEntries(registeredTools.map(tool => [tool.name, tool]))

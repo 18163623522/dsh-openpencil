@@ -337,11 +337,12 @@ export function parseHydratableNewResult(value: unknown): DesignNewResult | unde
   return value as unknown as DesignNewResult
 }
 
-const PIPELINE_RESULT_KEYS = new Set([...NEW_RESULT_KEYS, 'draftId', 'published', 'preview'])
+const PIPELINE_RESULT_KEYS = new Set([...NEW_RESULT_KEYS, 'draftId', 'published', 'preview', 'selectedStyle'])
 
 /** Accept only the canonical document-only result emitted by pipeline_finish. */
 function parseHydratablePublishedPipelineResult(value: unknown): PublishedDraft | undefined {
   if (!isRecord(value) || !hasExactKeys(value, PIPELINE_RESULT_KEYS)) return undefined
+  if (value.selectedStyle !== undefined && !isRecord(value.selectedStyle)) return undefined
   if (
     typeof value.draftId !== 'string'
     || !/^[A-Za-z0-9_-]{32}$/.test(value.draftId)
@@ -376,7 +377,7 @@ const PENDING_PIPELINE_RESULT_KEYS = new Set([
 ])
 const VISUAL_REVIEW_RESULT_KEYS = new Set([
   'draftId', 'path', 'published', 'stage', 'version', 'diagnostics', 'canContinue',
-  'next', 'digest', 'checklist', 'screenshot', 'finalization',
+  'next', 'digest', 'checklist', 'screenshot', 'finalization', 'selectedStyle',
 ])
 const MAX_VISUAL_REVIEW_LINES = 40
 function isBoundedStringArray(value: unknown, maxItems: number, maxLength: number): boolean {
@@ -415,6 +416,7 @@ function parseHydratablePendingPipelineResult(value: unknown): HydratablePending
     !isBoundedStringArray(value.digest, MAX_VISUAL_REVIEW_LINES, 200)
     || !isBoundedStringArray(value.checklist, MAX_VISUAL_REVIEW_LINES, 300)
   )) return undefined
+  if (visualReview && value.selectedStyle !== undefined && !isRecord(value.selectedStyle)) return undefined
   const finalization = value.finalization
   if (
     typeof value.draftId !== 'string'
@@ -635,7 +637,7 @@ export function parseHydratableInspectionResult(value: unknown): HydratableInspe
 const BATCH_RESULT_KEYS = new Set([
   'draftId', 'version', 'changed', 'generationScriptCount', 'generationScriptLimit',
   'rootNodeId', 'batch', 'canvas', 'canvasCheck', 'screenshot', 'previewUnavailable',
-  'diagnostics', 'canContinue', 'next',
+  'diagnostics', 'canContinue', 'next', 'selectedStyle',
 ])
 
 /** Accept a committed pipeline batch only when it carries a concrete PNG artifact. */
@@ -653,6 +655,7 @@ export function parseHydratableBatchResult(value: unknown): HydratableBatchResul
       || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value.rootNodeId)
     ))
     || !isRecord(value.batch)
+    || (value.selectedStyle !== undefined && !isRecord(value.selectedStyle))
     || !isRecord(value.canvas)
     || !isRecord(value.canvasCheck)
     || !isHydratableInspectionScreenshot(value.screenshot)
