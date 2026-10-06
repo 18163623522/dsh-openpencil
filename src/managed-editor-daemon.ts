@@ -1,6 +1,7 @@
 /** Shared lifecycle primitives for plugin-owned OpenPencil managed daemons. */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { managedEditorProcessOptions } from './managed-editor-process.js'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import {
   createServer,
@@ -351,15 +352,8 @@ export async function startManagedEditorDaemon(
   if (origin.origin !== options.allowOrigin || (origin.protocol !== 'http:' && origin.protocol !== 'https:')) {
     throw new Error('OpenPencil managed daemon allow-origin must be an HTTP origin')
   }
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    OPENPENCIL_WEB_BUNDLE_DIR: runtime.webBundleDir,
-    OPENPENCIL_CANVASKIT_DIR: runtime.canvasKitDir,
-  }
-  const child = spawn(runtime.binary, [
-    '--serve-web', '--managed', '--port', '0', '--file', options.sourcePath,
-    '--allow-origin', options.allowOrigin,
-  ], { stdio: ['pipe', 'pipe', 'pipe'], env })
+  const launch = await managedEditorProcessOptions(runtime, options.sourcePath, options.allowOrigin)
+  const child = spawn(runtime.binary, launch.args, { stdio: ['pipe', 'pipe', 'pipe'], env: launch.env })
   options.onSpawn?.(child)
   let diagnostics = ''
   child.stderr.on('data', (chunk: Buffer) => {

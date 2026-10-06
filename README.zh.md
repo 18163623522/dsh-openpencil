@@ -218,6 +218,8 @@ pnpm run sync:viewer-assets
 
 启动过程使用可安全应对慢速挂载的 listening handshake：只有在随包宿主报告已绑定地址后才开始就绪探测。无需安装桌面版 OpenPencil。
 
+托管编辑器的设置与用户资源保存在 `DSH_HOME` 下的私有目录，并按固定的运行时版本和源码修订隔离；不会读取或改写独立 OpenPencil 应用的设置文件。
+
 发布版提供六个原生平台包目标：`darwin-arm64`、`darwin-x64`、`linux-arm64`、`linux-x64`、`win32-arm64` 与 `win32-x64`；两个 Linux 包均以 glibc 为目标。根包将所有平台包声明为精确版本的 `optionalDependencies`，由 npm 根据 OS 与 CPU 选择匹配的包。每个平台包都将 `op-host-web-server`、编辑器 Web 打包产物与 CanvasKit 作为一套相互匹配的原子运行时随包提供。新包采用守护进程原生支持的部署布局：可执行文件位于 `bin/`，wasm-bindgen bundle 位于 `bin/web-bundle/`，CanvasKit 位于 `bin/web-bundle/canvaskit/`。发布 smoke 会显式移除两个资源发现环境变量后直接启动可执行文件，确保包本身即可启动。因此，托管编辑器默认不依赖 `/Applications/OpenPencil.app`、`PATH` 中的 `openpencil-desktop`，也不依赖 OpenPencil 源码检出。
 
 如果画布处于未保存状态时 DSH 重新加载或卸载插件，宿主会保留一份不透明的本地恢复草稿，最长七天。重新打开同一来源时，会先询问是否将其恢复到活动画布中；在用户明确保存之前，恢复过程绝不会覆盖 `.op` 文件。

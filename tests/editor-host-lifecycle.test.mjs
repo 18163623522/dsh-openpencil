@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -161,6 +161,7 @@ server.listen(0, '127.0.0.1', () => {
     sourcePath,
     webBundleDir: process.env.OPENPENCIL_WEB_BUNDLE_DIR,
     canvasKitDir: process.env.OPENPENCIL_CANVASKIT_DIR,
+    configRoot: process.argv[process.argv.indexOf('--config-root') + 1],
   }) + '\\n')
   setTimeout(() => {
     process.stdout.write(JSON.stringify({ ok: true, port, token: 'fake-daemon-token-123456789', version: 'test' }) + '\\n')
@@ -559,6 +560,8 @@ test('managed editor always injects both asset directories from its verified ato
     const [host] = await waitForHosts(harness.logPath, 1)
     assert.equal(host.webBundleDir, harness.root)
     assert.equal(host.canvasKitDir, harness.root)
+    assert.ok(host.configRoot.startsWith(join(harness.root, 'dsh-home', 'cache', 'dsh-openpencil', 'managed-settings')))
+    assert.equal((await stat(host.configRoot)).isDirectory(), true)
   } finally {
     if (previousBundle === undefined) delete process.env.OPENPENCIL_WEB_BUNDLE_DIR
     else process.env.OPENPENCIL_WEB_BUNDLE_DIR = previousBundle

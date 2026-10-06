@@ -220,6 +220,8 @@ Editable sessions use OpenPencil's managed web host — the same architecture us
 
 Startup uses a slow-mount-safe listening handshake: readiness probes begin only after the bundled host announces its bound address. No desktop OpenPencil installation is required.
 
+Managed editor daemons keep settings and user resources in a private directory under `DSH_HOME`, separated by the pinned runtime version and revision. They do not read or rewrite the standalone OpenPencil settings file.
+
 Published installations provide six native package targets: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, `win32-arm64`, and `win32-x64`; both Linux packages target glibc. The root package declares every platform package under exact-version `optionalDependencies`, allowing npm to select the matching package by OS and CPU. Each platform package stages `op-host-web-server`, the editor web bundle, and CanvasKit as one matching atomic runtime. New packages use the daemon's native deploy layout: the executable lives in `bin/`, the wasm-bindgen bundle in `bin/web-bundle/`, and CanvasKit in `bin/web-bundle/canvaskit/`. Release smoke tests start that executable with both asset-discovery environment variables removed, so the package must boot on its own. The managed editor therefore does not depend on `/Applications/OpenPencil.app`, `openpencil-desktop` on `PATH`, or an OpenPencil source checkout.
 
 If DSH reloads or unloads the plugin while the canvas is dirty, the host keeps an opaque local recovery draft for up to seven days. Reopening the same source asks before restoring it into the live canvas; recovery never overwrites the `.op` file until the user explicitly saves.

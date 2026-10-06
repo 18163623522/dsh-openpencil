@@ -12,6 +12,7 @@ import { constants as fsConstants } from 'node:fs'
 import { lstat, mkdtemp, open, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { managedEditorProcessOptions } from './managed-editor-process.js'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import {
@@ -988,15 +989,8 @@ export class EditorHostController {
       ])
       assertConnected()
 
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        OPENPENCIL_WEB_BUNDLE_DIR: runtime.webBundleDir,
-        OPENPENCIL_CANVASKIT_DIR: runtime.canvasKitDir,
-      }
-      const child = spawn(runtime.binary, [
-        '--serve-web', '--managed', '--port', '0', '--file', capability.sourcePath,
-        '--allow-origin', origin,
-      ], { stdio: ['pipe', 'pipe', 'pipe'], env })
+      const launch = await managedEditorProcessOptions(runtime, capability.sourcePath, origin)
+      const child = spawn(runtime.binary, launch.args, { stdio: ['pipe', 'pipe', 'pipe'], env: launch.env })
       launchChild = child
       this.#pendingChildren.add(child)
       let diagnostics = ''
