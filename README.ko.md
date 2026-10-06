@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## 디자인 도구
 
+선택적 스타일 흐름은 `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin`입니다. 원래 brief와 `style_selection`을 전달합니다. 카탈로그와 특정 가이드 선택에는 모델 추천이 필요 없으며 추천 제공자는 기본적으로 꺼져 있습니다. 이 전달은 script를 지원하며 app-agent와 상거래에는 지원되지 않습니다. 일반 app-agent 생성은 계속 사용할 수 있습니다.
+
 | 도구 | 역할 |
 | --- | --- |
 | `openpencil_new` | 단순 작업을 위한 호환 빠른 경로입니다. 하나의 트랜잭션 QuickJS `batch_design` 스크립트를 실행하고 대상이 없을 때만 게시한 뒤 편집 가능 프레젠테이션을 반환합니다. 프로덕션 디자인에는 아래 전체 파이프라인을 우선 사용하세요. |

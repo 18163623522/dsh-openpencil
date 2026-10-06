@@ -12,6 +12,9 @@ export const OPENPENCIL_PIPELINE_INSPECT_TOOL_NAME = 'openpencil_pipeline_inspec
 export const OPENPENCIL_PIPELINE_FINISH_TOOL_NAME = 'openpencil_pipeline_finish' as const
 export const OPENPENCIL_PIPELINE_ABORT_TOOL_NAME = 'openpencil_pipeline_abort' as const
 
+export const OPENPENCIL_STYLE_PLAN_TOOL_NAME = 'openpencil_style_plan' as const
+export const OPENPENCIL_STYLE_CONFIRM_TOOL_NAME = 'openpencil_style_confirm' as const
+
 /** The ordered model-facing workflow for a private, unpublished design draft. */
 export const OPENPENCIL_PIPELINE_TOOL_NAMES = [
   OPENPENCIL_PIPELINE_BEGIN_TOOL_NAME,
@@ -37,4 +40,6 @@ export const OPENPENCIL_TOOL_NAMES = [
   OPENPENCIL_CREATE_TOOL_NAME,
   OPENPENCIL_EDIT_TOOL_NAME,
   ...OPENPENCIL_PIPELINE_TOOL_NAMES,
+  OPENPENCIL_STYLE_PLAN_TOOL_NAME,
+  OPENPENCIL_STYLE_CONFIRM_TOOL_NAME,
 ] as const

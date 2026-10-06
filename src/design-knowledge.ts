@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs'
 
-interface StyleGuideDigest {
+export interface StyleGuideDigest {
   name: string
   platform: string
   tags: string[]
@@ -179,7 +179,7 @@ function darkenUntilAa(color: string, text: string): string {
  * shape. Unmapped keys inherit the caller's builtin fallback so a sparse
  * guide can never produce an incomplete palette.
  */
-function mapPalette(guide: StyleGuideDigest, fallback: ContinuationPalette): ContinuationPalette {
+export function mapGuidePalette(guide: StyleGuideDigest, fallback: ContinuationPalette): ContinuationPalette {
   const tokens = guide.palette
   const dark = guide.tags.includes('dark-mode')
   const page = findToken(tokens, [/^page background$/i, /^app background$/i, /background$/i]) ?? fallback.page
@@ -222,7 +222,7 @@ function mapPalette(guide: StyleGuideDigest, fallback: ContinuationPalette): Con
   return mapped
 }
 
-function typeScaleOf(guide: StyleGuideDigest): SelectedStyleGuide['typeScale'] {
+export function guideTypeScaleOf(guide: StyleGuideDigest): SelectedStyleGuide['typeScale'] {
   const rows = new Map(guide.type.map(([level, size, weight]) => [level.toLowerCase(), [size, weight] as [number, number]]))
   const pick = (...levels: string[]): [number, number] | undefined => {
     for (const level of levels) {
@@ -271,8 +271,8 @@ export function selectStyleGuide(
   return {
     name: guide.name,
     tags: guide.tags,
-    palette: mapPalette(guide, fallback),
-    typeScale: typeScaleOf(guide),
+    palette: mapGuidePalette(guide, fallback),
+    typeScale: guideTypeScaleOf(guide),
     direction: direction.slice(0, 460),
     surfaces: guide.aesthetics.slice(3, 5).join(' ').slice(0, 220),
   }

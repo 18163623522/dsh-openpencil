@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## Công cụ Thiết kế
 
+Lựa chọn tùy chọn theo `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin`, giữ brief gốc và truyền `style_selection`. Danh mục và chọn chính xác không cần đề xuất; nhà cung cấp mặc định tắt. Handoff hỗ trợ script, không hỗ trợ app-agent hay commerce. Tạo app-agent thông thường vẫn dùng được.
+
 | Công cụ | Chức năng |
 | --- | --- |
 | `openpencil_new` | Lối nhanh tương thích cho tác vụ đơn giản: chạy một script QuickJS `batch_design` giao dịch, chỉ công bố nếu đích chưa tồn tại và trả về phần trình bày có thể chỉnh sửa. Hãy ưu tiên pipeline đầy đủ cho thiết kế production. |

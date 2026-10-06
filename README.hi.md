@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## डिज़ाइन टूल
 
+वैकल्पिक शैली क्रम `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin` है; मूल brief और `style_selection` दें। कैटलॉग और सटीक गाइड चयन को मॉडल अनुशंसा की जरूरत नहीं है; प्रदाता डिफ़ॉल्ट रूप से बंद है। यह हस्तांतरण script को समर्थन देता है, app-agent और commerce को नहीं। सामान्य app-agent निर्माण उपलब्ध रहता है।
+
 | टूल | यह क्या करता है |
 | --- | --- |
 | `openpencil_new` | सरल कामों के लिए संगत तेज़ पथ: एक transactional QuickJS `batch_design` script चलाता है, target न होने पर ही प्रकाशित करता है और editable presentation लौटाता है। production design के लिए नीचे की पूर्ण pipeline चुनें। |

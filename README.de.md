@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## Design-Tools
 
+Die optionale Auswahl folgt `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin` mit ursprünglichem Brief und `style_selection`. Katalog und exakte Auswahl benötigen keine Empfehlung; der Anbieter ist standardmäßig deaktiviert. Diese Übergabe unterstützt script, nicht app-agent oder Commerce. Normale app-agent-Generierung bleibt verfügbar.
+
 | Tool | Funktion |
 | --- | --- |
 | `openpencil_new` | Kompatibler Schnellpfad für einfache Aufgaben: führt ein transaktionales QuickJS-`batch_design`-Skript aus, veröffentlicht nur bei noch nicht vorhandenem Ziel und gibt eine bearbeitbare Darstellung zurück. Für produktionsreife Designs ist die vollständige Pipeline vorzuziehen. |
