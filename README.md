@@ -141,6 +141,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## Design Tools
 
+Optional style selection uses `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin` with the original brief and `style_selection` handle. Catalog browsing and exact-guide choice work without a model recommendation; the recommendation provider is off by default. This handoff supports the script engine. App-agent and commerce handoffs remain unsupported; ordinary app-agent generation still works.
+
 | Tool | What it does |
 | --- | --- |
 | `openpencil_new` | Compatible fast path for simple jobs: runs one transactional QuickJS `batch_design` script, publishes with create-if-absent semantics, and returns an editable presentation. Prefer the full pipeline below for production design. |

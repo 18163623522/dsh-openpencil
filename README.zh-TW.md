@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## 設計工具
 
+可選風格流程為 `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin`，begin 保留原始 brief 並傳入 `style_selection`。目錄瀏覽和精確選擇無需模型推薦；推薦提供者預設關閉。此交接支援 script，app-agent 與電商風格交接暫不支援；一般 app-agent 生成仍可用。
+
 | 工具 | 功能說明 |
 | --- | --- |
 | `openpencil_new` | 適合簡單工作的相容快速路徑：執行一份交易性 QuickJS `batch_design` 指令碼，以「僅在不存在時建立」語意發布並回傳可編輯呈現。正式設計應優先使用下方完整管線。 |

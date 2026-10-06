@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## Alat Desain
 
+Pilihan opsional mengikuti `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin` dengan brief asli dan `style_selection`. Katalog dan pilihan tepat tidak membutuhkan rekomendasi; penyedia bawaan dimatikan. Handoff mendukung script, bukan app-agent atau commerce. Pembuatan app-agent biasa tetap tersedia.
+
 | Alat | Fungsinya |
 | --- | --- |
 | `openpencil_new` | Jalur cepat kompatibel untuk pekerjaan sederhana: menjalankan satu skrip QuickJS `batch_design` transaksional, menerbitkan hanya jika target belum ada, dan mengembalikan presentasi yang dapat diedit. Utamakan pipeline penuh untuk desain produksi. |

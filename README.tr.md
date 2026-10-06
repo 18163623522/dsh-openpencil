@@ -139,6 +139,8 @@ pnpm dlx --package=@deepseek-ai/dsh@latest dsh web
 
 ## Tasarım Araçları
 
+İsteğe bağlı seçim `openpencil_style_plan` → `openpencil_style_confirm` → `openpencil_pipeline_begin` sırasını, özgün brief ve `style_selection` ile kullanır. Katalog ve kesin seçim öneri gerektirmez; sağlayıcı varsayılan olarak kapalıdır. Aktarım script destekler, app-agent ve ticaret desteklemez. Normal app-agent üretimi kullanılabilir.
+
 | Araç | Ne yapar |
 | --- | --- |
 | `openpencil_new` | Basit işler için uyumlu hızlı yol: tek bir işlemsel QuickJS `batch_design` betiği çalıştırır, yalnızca hedef yoksa yayımlar ve düzenlenebilir bir sunum döndürür. Üretim tasarımında tam pipeline'ı tercih edin. |
