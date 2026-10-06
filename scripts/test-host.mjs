@@ -11,6 +11,14 @@ if (!fixture) throw new Error('usage: node scripts/test-host.mjs <design.op> [ex
 const expectedWidth = process.argv[3] === undefined ? undefined : Number(process.argv[3])
 const expectedHeight = process.argv[4] === undefined ? undefined : Number(process.argv[4])
 
+// Consume ignored bodies before daemon/server disposal. Leaving a response
+// paused can race socket shutdown in the Desktop runtime's Undici client.
+async function drainedFetch(url, options) {
+  const response = await fetch(url, options)
+  await response.arrayBuffer()
+  return response
+}
+
 const root = await mkdtemp(join(tmpdir(), 'dsh-openpencil-host-'))
 process.env.DSH_HOME = join(root, 'dsh-home')
 
@@ -178,6 +186,7 @@ try {
   assert.equal(launch.docJson, sourceBytes.toString('utf8'))
   const iframeResponse = await fetch(launch.iframeUrl)
   assert.equal(iframeResponse.status, 200)
+  await iframeResponse.arrayBuffer()
 
   // The managed editor is also the direct-drive target. Mirror one browser
   // selection push, read it through the DSH proxy, then patch that selected
@@ -234,6 +243,7 @@ try {
     body: JSON.stringify({ sessionId: launch.sessionId, dirty: false }),
   })
   assert.equal(savedCloseResponse.status, 200)
+  await savedCloseResponse.arrayBuffer()
   await editorHost.dispose()
   editorHost = new EditorHostController(editorMasterKey)
   editorHost.attachRoute()
@@ -244,7 +254,7 @@ try {
   assert.equal(savedReplayResponse.status, 200, savedReplayText)
   const savedReplay = JSON.parse(savedReplayText)
   assert.equal(savedReplay.docJson, changedBytes.toString('utf8'))
-  await fetch(`${origin}${savedReplay.closeUrl}`, {
+  await drainedFetch(`${origin}${savedReplay.closeUrl}`, {
     method: 'DELETE', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ sessionId: savedReplay.sessionId, dirty: false }),
   })
@@ -261,12 +271,14 @@ try {
     body: JSON.stringify({ ...saveBody, sessionId: conflictLaunch.sessionId, revision: 2 }),
   })
   assert.equal(conflictResponse.status, 409)
+  await conflictResponse.arrayBuffer()
   const closeResponse = await fetch(`${origin}${conflictLaunch.closeUrl}`, {
     method: 'DELETE',
     headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ sessionId: conflictLaunch.sessionId, dirty: true }),
   })
   assert.equal(closeResponse.status, 200)
+  await closeResponse.arrayBuffer()
 
   // Editor launch capabilities are self-contained and survive a plugin
   // controller recreation when the persistent DSH access key is unchanged.
@@ -281,7 +293,7 @@ try {
   assert.equal(replayResponse.status, 200, replayText)
   const replay = JSON.parse(replayText)
   assert.equal(replay.docJson, sourceBytes.toString('utf8'))
-  await fetch(`${origin}${replay.closeUrl}`, {
+  await drainedFetch(`${origin}${replay.closeUrl}`, {
     method: 'DELETE', headers: { origin, 'content-type': 'application/json' },
     body: JSON.stringify({ sessionId: replay.sessionId, dirty: false }),
   })
